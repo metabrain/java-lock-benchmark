@@ -1,20 +1,31 @@
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.locks.*;
 
 
 abstract class Worker extends Thread {
-	public static volatile boolean testing = false ;
+	public CyclicBarrier barrier ;
+	public static boolean testing = true ;
 	public double steps = 0 ;
 	abstract void go() ;
 
 	@Override
 	public void run() {
-		System.out.println("run");
-		while(testing==false) {
-			//System.out.println(0);
-		}
-		System.out.println("1");
+//		System.out.println("run");
+//		while(testing==false) {
+//			//System.out.println(0);
+//		}
+//		System.out.println("1");
 
-		while(testing==true) {go();steps++;}
+		try {
+//			System.out.println("waiting");
+			barrier.await();
+			while(testing) {go();steps++;}
+			barrier.await();
+		} catch (Exception e) {
+			e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+			System.exit(1);
+		}
 
 		return ;
 	}
@@ -72,31 +83,35 @@ public class Main {
 	public static void benchmark(String clazz) throws Exception {
 		Class c = Class.forName(clazz);
 		Worker[] bt = new Worker[threads];
+		final CyclicBarrier barrier = new CyclicBarrier(threads + 1);
 
 		//Spawn and start
 		for (int i = 0; i < bt.length; i++) {
-			bt[i] = (Worker) c.newInstance();
+			bt[i] = ((Worker) c.newInstance());
+			bt[i].barrier = barrier ;
 			bt[i].start();
 		}
 
 		//Start benchmark
-		Worker.testing = true;
+		//wait for all workers and main thread to be ready to run
+		Worker.testing = true ;
+		barrier.await();
 
 		//Count time till end of benchmark
 		long wstart = System.currentTimeMillis();
 		Thread.sleep(time);
-
-		//Stop benchmarking
-		Worker.testing = false;
 		long wend = System.currentTimeMillis();
 
+		//Stop benchmarking
+		//wait for all workers and main thread to be complete
+		Worker.testing = false ;
+		barrier.await();
 
 		//Asset total iterations on all threads and join threads
 		double iterations = 0 ;
 		for (int i = 0; i < bt.length; i++) {
 			iterations += bt[i].steps ;
 			bt[i].join(100);
-//			bt[i].join();
 			try {
 			bt[i].stop();
 			bt[i].interrupt();
@@ -119,12 +134,12 @@ public class Main {
 
 	public static void main(String[] args) throws Exception {
 
-		if(args.length!=3) {
-			System.out.println("Usage: <time> <n_threads> <cycles>(atomic operation dificulty)");
-		}
-		time = Integer.parseInt(args[0]);
-		threads = Integer.parseInt(args[1]);
-		cycles = Integer.parseInt(args[2]);
+//		if(args.length!=3) {
+//			System.out.println("Usage: <time> <n_threads> <cycles>(atomic operation dificulty)");
+//		}
+//		time = Integer.parseInt(args[0]);
+//		threads = Integer.parseInt(args[1]);
+//		cycles = Integer.parseInt(args[2]);
 
 		benchmark("SyncWorker");
 		benchmark("ReentrantWorker");
